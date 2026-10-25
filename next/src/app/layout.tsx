@@ -23,12 +23,12 @@ const mono = IBM_Plex_Mono({
   display: "swap",
 });
 export const metadata: Metadata = {
-  title: "Orrery · A little closer to the cosmos",
+  title: "Solace · A little closer to the cosmos",
   description:
     "Your place in the universe. Explore real planetary positions, travel through time, and find the Moon, planets and stars above your own patch of Earth.",
-  applicationName: "Orrery",
+  applicationName: "Solace",
   openGraph: {
-    title: "Orrery · A little closer to the cosmos",
+    title: "Solace · A little closer to the cosmos",
     description:
       "Eight worlds. One star. And you, somewhere in the middle of it all.",
     type: "website",

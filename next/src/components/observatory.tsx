@@ -47,7 +47,7 @@ const OrbitalScene = dynamic(() => import("./orbital-scene"), {
     </div>
   ),
 });
-const STORAGE_KEY = "orrery.observer.v1";
+const STORAGE_KEY = "solace.observer.v1";
 type Panel = "objects" | "sky" | "settings" | "details" | null;
 
 export default function Observatory({ initialTime }: { initialTime: number }) {
@@ -72,7 +72,9 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
     const frame = requestAnimationFrame(() => {
       setDate(Date.now());
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored =
+          localStorage.getItem(STORAGE_KEY) ??
+          localStorage.getItem("orrery.observer.v1");
         if (stored) {
           const value = JSON.parse(stored);
           if (isLocation(value)) setLocation(value);
@@ -174,7 +176,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
         <button
           className="brand"
           onClick={reset}
-          aria-label="Orrery, reset solar system view"
+          aria-label="Solace, reset solar system view"
         >
           <span className="brand-symbol">
             <i />
@@ -182,7 +184,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
             <b />
           </span>
           <span>
-            orrery<span className="brand-period">.</span>
+            solace<span className="brand-period">.</span>
           </span>
         </button>
         <div className="celestial-mood" aria-label="Tropical zodiac signs">
