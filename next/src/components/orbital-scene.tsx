@@ -2,6 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import {
+  sunMaterial,
+  addEarthLayers,
+  atmosphere,
+  ATMOSPHERES,
+  saturnRings,
+  corona,
+} from "@/lib/planet-materials";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   JupiterMoons,
@@ -38,14 +50,16 @@ export default function OrbitalScene(props: Props) {
       renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
-        powerPreference: "low-power",
+        powerPreference: "high-performance",
       });
     } catch {
       queueMicrotask(() => setFailed(true));
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7));
-    renderer.setClearColor(0x080b0e, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setClearColor(0x000000, 1);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.setAttribute(
       "aria-label",
@@ -54,8 +68,8 @@ export default function OrbitalScene(props: Props) {
     renderer.domElement.setAttribute("role", "img");
     host.prepend(renderer.domElement);
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 250);
-    camera.position.set(5, 30, 38);
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.02, 500);
+    camera.position.set(8, 25, 43);
     let portrait =
       host.clientWidth < 600 && host.clientHeight > host.clientWidth;
     camera.up.set(portrait ? 1 : 0, portrait ? 0 : 1, 0);
@@ -77,65 +91,62 @@ export default function OrbitalScene(props: Props) {
     ).matches;
     let controls = createControls();
     controls.enableDamping = !reducedMotion;
-    scene.add(new THREE.AmbientLight(0xa7bfd8, 1.25));
-    const sunlight = new THREE.PointLight(0xffdfae, 50, 0, 1);
+    const renderTarget = new THREE.WebGLRenderTarget(1, 1, {
+      type: THREE.HalfFloatType,
+      samples: 4,
+    });
+    const composer = new EffectComposer(renderer, renderTarget);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.19, 0.2, 1.6);
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(bloom);
+    const output = new OutputPass();
+    composer.addPass(output);
+    scene.add(new THREE.AmbientLight(0x7185a3, 0.07));
+    scene.add(new THREE.HemisphereLight(0xa4c7f0, 0x080705, 0.13));
+    const sunlight = new THREE.PointLight(0xfff6e9, 3.4, 0, 0);
     scene.add(sunlight);
-    const geometry = new THREE.SphereGeometry(1, 40, 28);
+    const geometry = new THREE.SphereGeometry(1, 64, 48);
     const loader = new THREE.TextureLoader();
     const meshes = new Map<ObjectId, THREE.Mesh>();
     const textures: THREE.Texture[] = [];
-    for (const body of BODIES) {
-      const texture = loader.load("/textures/" + body.texture);
-      texture.colorSpace = THREE.SRGBColorSpace;
+    const load = (file: string, color = true) => {
+      const texture = loader.load("/textures/" + file);
+      if (color) texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = Math.min(
+        8,
+        renderer.capabilities.getMaxAnisotropy(),
+      );
       textures.push(texture);
+      return texture;
+    };
+    for (const body of BODIES) {
+      const texture = load(body.texture);
       const material =
         body.id === "Sun"
-          ? new THREE.MeshBasicMaterial({ map: texture, color: 0xffca89 })
+          ? sunMaterial(texture)
           : new THREE.MeshStandardMaterial({
               map: texture,
-              roughness: 1,
+              roughness: body.id === "Earth" ? 0.6 : 0.94,
               metalness: 0,
             });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.scale.setScalar(body.radius);
-      mesh.rotation.z = body.id === "Earth" ? 0.409 : 0.06;
+      if (body.id === "Jupiter") mesh.scale.y *= 0.935;
+      if (body.id === "Saturn") mesh.scale.y *= 0.902;
+      mesh.rotation.z =
+        body.id === "Earth" ? 0.409 : body.id === "Uranus" ? 1.71 : 0.04;
+      if (body.id === "Earth") addEarthLayers(mesh, load);
+      const air = ATMOSPHERES[body.id];
+      if (air) mesh.add(atmosphere(...air));
       scene.add(mesh);
       meshes.set(body.id, mesh);
     }
-    const ringGeo = new THREE.RingGeometry(0.84, 1.34, 100);
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0xbaa681,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.7,
-      roughness: 1,
-    });
-    const saturnRing = new THREE.Mesh(ringGeo, ringMat);
-    saturnRing.rotation.x = -Math.PI / 2 + 0.46;
+    const saturnRing = saturnRings(load("2k_saturn_ring_alpha.png"));
+    saturnRing.scale.setScalar(1.235);
     scene.add(saturnRing);
-    const glowCanvas = document.createElement("canvas");
-    glowCanvas.width = 256;
-    glowCanvas.height = 256;
-    const ctx = glowCanvas.getContext("2d")!;
-    const gradient = ctx.createRadialGradient(128, 128, 8, 128, 128, 128);
-    gradient.addColorStop(0, "rgba(255,216,158,1)");
-    gradient.addColorStop(0.18, "rgba(255,159,69,.4)");
-    gradient.addColorStop(0.48, "rgba(231,121,45,.09)");
-    gradient.addColorStop(1, "rgba(220,120,45,0)");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 256, 256);
-    const glowTex = new THREE.CanvasTexture(glowCanvas);
-    textures.push(glowTex);
-    const glow = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: glowTex,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
-    glow.scale.set(10, 10, 1);
-    scene.add(glow);
+    const glow = corona();
+    scene.add(glow.sprite);
+    textures.push(glow.texture);
     const trails = new THREE.Group();
     scene.add(trails);
     const reference = new Date(latest.current.date);
@@ -153,9 +164,9 @@ export default function OrbitalScene(props: Props) {
       const trail = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(points),
         new THREE.LineBasicMaterial({
-          color: body.id === "Earth" ? 0x4b716e : 0x606369,
+          color: body.id === "Earth" ? 0x467c91 : 0x75828c,
           transparent: true,
-          opacity: body.id === "Earth" ? 0.55 : 0.22,
+          opacity: body.id === "Earth" ? 0.24 : 0.105,
         }),
       );
       trails.add(trail);
@@ -203,23 +214,12 @@ export default function OrbitalScene(props: Props) {
       ),
       new THREE.PointsMaterial({
         color: 0xa8b4c4,
-        size: 0.055,
+        size: 0.035,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.42,
       }),
     );
     scene.add(stars);
-    const selection = new THREE.Mesh(
-      new THREE.RingGeometry(0.48, 0.5, 64),
-      new THREE.MeshBasicMaterial({
-        color: 0xdba579,
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide,
-        depthTest: false,
-      }),
-    );
-    scene.add(selection);
     const moonMeshes = Array.from({ length: 4 }, () => {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.055, 12, 8),
@@ -240,6 +240,9 @@ export default function OrbitalScene(props: Props) {
     const labels = Array.from(
       host.querySelectorAll<HTMLButtonElement>("[data-object]"),
     );
+    const satelliteLabels = Array.from(
+      host.querySelectorAll<HTMLElement>("[data-satellite]"),
+    );
     let active = true,
       frame = 0,
       lastFrame = 0,
@@ -248,21 +251,35 @@ export default function OrbitalScene(props: Props) {
     const resize = () => {
       const { width, height } = host.getBoundingClientRect();
       renderer.setSize(width, height);
+      composer.setSize(width, height);
       camera.aspect = width / Math.max(height, 1);
       const nextPortrait = width < 600 && height > width;
-      if (nextPortrait !== portrait) {
+      if (nextPortrait !== portrait && !following) {
         portrait = nextPortrait;
         camera.up.set(portrait ? 1 : 0, portrait ? 0 : 1, 0);
         controls.dispose();
         controls = createControls();
         controls.enableDamping = !reducedMotion;
-        camera.position.set(5, 30, 38).multiplyScalar(fitScale);
+        camera.position.set(8, 25, 43).multiplyScalar(fitScale);
         flight = null;
         following = null;
         lastZoom = 1;
       }
-      const nextFit = Math.max(1.12, (portrait ? 0.79 : 1.52) / camera.aspect);
-      camera.position.multiplyScalar(nextFit / fitScale);
+      const nextFit = Math.max(
+        1.04,
+        (nextPortrait ? 0.81 : 1.48) / camera.aspect,
+      );
+      portrait = nextPortrait;
+      if (!following) camera.position.multiplyScalar(nextFit / fitScale);
+      else
+        camera.setViewOffset(
+          width,
+          height,
+          portrait ? 0 : -width * 0.11,
+          portrait ? height * 0.22 : 0,
+          width,
+          height,
+        );
       fitScale = nextFit;
       camera.updateProjectionMatrix();
     };
@@ -280,8 +297,13 @@ export default function OrbitalScene(props: Props) {
       lastFrame = time;
       const p = latest.current;
       if (p.topView !== lastTop || p.resetKey !== lastReset) {
+        camera.clearViewOffset();
+        camera.up.set(portrait ? 1 : 0, portrait ? 0 : 1, 0);
+        controls.dispose();
+        controls = createControls();
+        controls.enableDamping = !reducedMotion;
         camera.position
-          .set(p.topView ? 0 : 5, p.topView ? 49 : 30, p.topView ? 0.01 : 38)
+          .set(p.topView ? 0 : 8, p.topView ? 52 : 25, p.topView ? 0.01 : 43)
           .multiplyScalar(fitScale * (portrait && p.topView ? 1.85 : 1));
         controls.target.set(0, 0, 0);
         lastTop = p.topView;
@@ -314,9 +336,9 @@ export default function OrbitalScene(props: Props) {
               new Vector(v.x, v.y, v.z, v.t),
             );
             moonMeshes[i].position.set(
-              jup.x + e.x * 500,
-              jup.y + e.z * 500,
-              jup.z - e.y * 500,
+              jup.x + e.x * 650,
+              jup.y + e.z * 650,
+              jup.z - e.y * 650,
             );
           },
         );
@@ -325,17 +347,45 @@ export default function OrbitalScene(props: Props) {
       if (p.focusKey !== lastFocus) {
         const target = meshes.get(p.selected)!.position.clone(),
           body = BODIES.find((b) => b.id === p.selected)!;
+        camera.up.set(0, 1, 0);
+        controls.dispose();
+        controls = createControls();
+        controls.enableDamping = !reducedMotion;
+        controls.minDistance = Math.max(0.25, body.radius * 1.8);
         const distance =
-          p.selected === "Sun"
-            ? 10
-            : p.selected === "Saturn"
-              ? 7
-              : Math.max(3.5, body.radius * 8);
+          p.selected === "Saturn"
+            ? portrait
+              ? 14
+              : 8.2
+            : p.selected === "Jupiter"
+              ? portrait
+                ? 15
+                : 10.5
+              : body.radius * (portrait ? 10 : 5.6);
+        const w = host.clientWidth,
+          h = host.clientHeight;
+        camera.setViewOffset(
+          w,
+          h,
+          portrait ? 0 : -w * 0.11,
+          portrait ? h * 0.22 : 0,
+          w,
+          h,
+        );
+        const sunward = target.clone().negate().setY(0).normalize();
+        if (p.selected === "Sun") sunward.set(0.5, 0, 1).normalize();
+        const tangent = new THREE.Vector3().crossVectors(
+          sunward,
+          new THREE.Vector3(0, 1, 0),
+        );
+        const approach = sunward
+          .multiplyScalar(0.8)
+          .addScaledVector(tangent, 0.6)
+          .setY(0.25)
+          .normalize();
         flight = {
           target,
-          position: target
-            .clone()
-            .add(new THREE.Vector3(0, distance * 0.3, distance)),
+          position: target.clone().addScaledVector(approach, distance),
         };
         lastFocus = p.focusKey;
         following = p.selected;
@@ -352,26 +402,37 @@ export default function OrbitalScene(props: Props) {
         camera.position.add(delta);
         controls.target.add(delta);
       }
-      trails.visible = p.showOrbits;
-      belt.visible = p.showOrbits;
-      const target = meshes.get(p.selected)!;
-      selection.position.copy(target.position);
-      selection.quaternion.copy(camera.quaternion);
-      selection.scale.setScalar(
-        p.selected === "Sun"
-          ? 3
-          : p.selected === "Jupiter"
-            ? 1.9
-            : p.selected === "Saturn"
-              ? 2
-              : 1,
-      );
+      for (const [id, mesh] of meshes)
+        mesh.visible =
+          !following ||
+          id === following ||
+          (following === "Earth" && id === "Moon");
+      saturnRing.visible = !following || following === "Saturn";
+      glow.sprite.visible = !following || following === "Sun";
+      trails.visible = p.showOrbits && !following;
+      belt.visible = p.showOrbits && !following;
       moonMeshes.forEach((m) => {
         m.visible = p.selected === "Jupiter";
       });
       controls.update();
-      renderer.render(scene, camera);
+      composer.render();
       const { clientWidth: w, clientHeight: h } = host;
+      for (const [index, label] of satelliteLabels.entries()) {
+        projected.copy(moonMeshes[index].position).project(camera);
+        const x = (projected.x * 0.5 + 0.5) * w;
+        const y = (-projected.y * 0.5 + 0.5) * h;
+        label.style.transform = `translate(${x + 7}px,${y + 7}px)`;
+        label.style.visibility =
+          following === "Jupiter" &&
+          p.showLabels &&
+          projected.z < 1 &&
+          x > 0 &&
+          x < w - 65 &&
+          y > 0 &&
+          y < h - 60
+            ? "visible"
+            : "hidden";
+      }
       const occupied: { x: number; y: number }[] = [];
       for (const label of labels) {
         const id = label.dataset.object as ObjectId;
@@ -379,10 +440,46 @@ export default function OrbitalScene(props: Props) {
         const x = (projected.x * 0.5 + 0.5) * w,
           y = (-projected.y * 0.5 + 0.5) * h;
         label.style.transform = `translate(${x}px,${y}px)`;
+        const bodyPosition = meshes.get(id)!.position;
+        const labelDirection = bodyPosition
+          .clone()
+          .sub(camera.position)
+          .normalize();
+        const bodyDistance = camera.position.distanceTo(bodyPosition);
+        const occluded = BODIES.some((other) => {
+          if (other.id === id || !meshes.get(other.id)!.visible) return false;
+          const relative = meshes
+            .get(other.id)!
+            .position.clone()
+            .sub(camera.position);
+          const along = relative.dot(labelDirection);
+          return (
+            along > 0 &&
+            along < bodyDistance &&
+            relative.lengthSq() - along * along <
+              other.radius * other.radius * 0.95
+          );
+        });
         const visible =
-          p.showLabels && projected.z < 1 && x > 0 && x < w && y > 0 && y < h;
+          !occluded &&
+          p.showLabels &&
+          (!following || (following === "Earth" && id === "Moon")) &&
+          projected.z < 1 &&
+          x > 0 &&
+          x < w &&
+          y > 0 &&
+          y < h;
         label.style.visibility = visible ? "visible" : "hidden";
         if (visible) {
+          const bodyRadius = BODIES.find((body) => body.id === id)!.radius;
+          const screenRadius = Math.max(
+            9,
+            ((bodyRadius /
+              camera.position.distanceTo(meshes.get(id)!.position)) *
+              h) /
+              (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))),
+          );
+          const gap = screenRadius + 8;
           const offsets =
             id === "Moon"
               ? [
@@ -393,13 +490,13 @@ export default function OrbitalScene(props: Props) {
                   [10, -38],
                 ]
               : [
-                  [8, 13],
-                  [8, -22],
-                  [-55, 13],
-                  [-55, -22],
-                  [10, 28],
-                  [-55, -37],
-                  [10, -37],
+                  [gap, 3],
+                  [gap, -19],
+                  [-gap - 62, 3],
+                  [-gap - 62, -19],
+                  [6, gap + 3],
+                  [-61, -gap - 17],
+                  [8, -gap - 17],
                 ];
           const offset =
             offsets.find(
@@ -475,9 +572,10 @@ export default function OrbitalScene(props: Props) {
         if (
           obj instanceof THREE.Mesh ||
           obj instanceof THREE.Points ||
-          obj instanceof THREE.Line
+          obj instanceof THREE.Line ||
+          obj instanceof THREE.Sprite
         ) {
-          obj.geometry.dispose();
+          if ("geometry" in obj) obj.geometry.dispose();
           const materials = Array.isArray(obj.material)
             ? obj.material
             : [obj.material];
@@ -485,6 +583,9 @@ export default function OrbitalScene(props: Props) {
         }
       });
       textures.forEach((t) => t.dispose());
+      bloom.dispose();
+      output.dispose();
+      composer.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -501,6 +602,12 @@ export default function OrbitalScene(props: Props) {
           </p>
         </div>
       )}
+      {!failed &&
+        ["Io", "Europa", "Ganymede", "Callisto"].map((name, index) => (
+          <span key={name} data-satellite={index} className="satellite-label">
+            {name}
+          </span>
+        ))}
       {!failed &&
         BODIES.map((b) => (
           <button

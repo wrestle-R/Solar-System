@@ -4,12 +4,11 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowsClockwiseIcon,
+  ArrowLeftIcon,
   ArrowUpRightIcon,
   CircleIcon,
   CompassIcon,
-  CrosshairIcon,
   CubeIcon,
-  InfoIcon,
   ListBulletsIcon,
   MapPinIcon,
   MinusIcon,
@@ -34,17 +33,17 @@ import {
   type ObserverLocation,
 } from "@/lib/astronomy";
 import TimeControls from "./time-controls";
+import LaunchIntro from "./launch-intro";
 import LocationDialog from "./location-dialog";
 import ObjectDetails from "./object-details";
 import SkyChart from "./sky-chart";
-import FieldNotes from "./field-notes";
 
 const OrbitalScene = dynamic(() => import("./orbital-scene"), {
   ssr: false,
   loading: () => (
     <div className="scene-loading">
       <span className="loading-orbit" />
-      <span>Finding our place in the universe…</span>
+      <span>Opening the solar system…</span>
     </div>
   ),
 });
@@ -66,7 +65,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
   const [showLabels, setShowLabels] = useState(true);
   const [resetKey, setResetKey] = useState(0);
   const [focusKey, setFocusKey] = useState(0);
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [storageNote, setStorageNote] = useState("");
 
   useEffect(() => {
@@ -130,12 +129,17 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
   }
   function select(id: ObjectId) {
     setSelected(id);
+    setFocused(true);
     setPanel("details");
+    setFocusKey((key) => key + 1);
+    setZoom(1);
   }
   function reset() {
+    setFocused(false);
     setResetKey((key) => key + 1);
     setZoom(1);
     setTopView(false);
+    setPanel(null);
   }
   const minute = Math.floor(date / 60000) * 60000;
   const zodiac = useMemo(() => signs(new Date(minute)), [minute]);
@@ -147,7 +151,10 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
   const travelling = playing && date > MIN_DATE && date < MAX_DATE;
 
   return (
-    <main className="universe" aria-label="Interactive solar system">
+    <main
+      className={`universe ${focused ? "is-focused" : ""}`}
+      aria-label="Interactive solar system"
+    >
       <h1 className="sr-only">Explore the solar system in 3D</h1>
       <div className="universe-scene">
         <OrbitalScene
@@ -179,33 +186,33 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
           </span>
         </button>
         <div className="celestial-mood" aria-label="Tropical zodiac signs">
-          <button
-            onClick={() => setNotesOpen(true)}
-            title="Sun sign, tropical zodiac"
-          >
+          <div className="zodiac-item" title="Sun sign, tropical zodiac">
             <span className="zodiac-symbol">{zodiac.sun.symbol}</span>
             <span>
               <small>SUN</small>
               {zodiac.sun.name}
             </span>
-          </button>
+          </div>
           <span className="mood-divider" />
-          <button
-            onClick={() => setNotesOpen(true)}
-            title="Moon sign, tropical zodiac"
-          >
+          <div className="zodiac-item" title="Moon sign, tropical zodiac">
             <span className="zodiac-symbol">{zodiac.moon.symbol}</span>
             <span>
               <small>MOON</small>
               {zodiac.moon.name}
             </span>
-          </button>
+          </div>
         </div>
       </header>
 
+      {focused && (
+        <button className="overview-return" onClick={reset}>
+          <ArrowLeftIcon />
+          Back to the solar system
+        </button>
+      )}
       <div className="view-caption" aria-hidden="true">
-        <span>SOL / 01</span>
-        <span>OUR SOLAR SYSTEM</span>
+        <span>THE SOLAR SYSTEM</span>
+        <span>8 planets · one home</span>
       </div>
 
       <div className="side-tools" aria-label="Explorer tools">
@@ -233,7 +240,11 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
         <span className="tool-separator" />
         <button
           className={`tool-button ${topView ? "active" : ""}`}
-          onClick={() => setTopView(!topView)}
+          onClick={() => {
+            setTopView(!topView);
+            setFocused(false);
+            setPanel(null);
+          }}
           aria-label={
             topView ? "Switch to perspective view" : "Switch to top view"
           }
@@ -301,17 +312,42 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
                 location={location}
                 onLocation={() => setLocationOpen(true)}
               />
-              <button
-                className="focus-button"
-                onClick={() => {
-                  setFocusKey((key) => key + 1);
-                  setZoom(1);
-                }}
-              >
-                <CrosshairIcon />
-                Take a closer look
-                <ArrowUpRightIcon />
-              </button>
+              <div className="planet-navigation">
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    select(
+                      BODIES[
+                        (BODIES.findIndex((body) => body.id === selected) +
+                          BODIES.length -
+                          1) %
+                          BODIES.length
+                      ].id,
+                    )
+                  }
+                  aria-label="Previous planet"
+                >
+                  ←
+                </button>
+                <button className="focus-button" onClick={reset}>
+                  <CompassIcon />
+                  Solar system
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    select(
+                      BODIES[
+                        (BODIES.findIndex((body) => body.id === selected) + 1) %
+                          BODIES.length
+                      ].id,
+                    )
+                  }
+                  aria-label="Next planet"
+                >
+                  →
+                </button>
+              </div>
               {selected === "Jupiter" && (
                 <p className="panel-hint">
                   Io, Europa, Ganymede and Callisto are shown with enlarged
@@ -367,13 +403,6 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
                 Reset camera
                 <ArrowsClockwiseIcon />
               </button>
-              <button
-                className="setting-row"
-                onClick={() => setNotesOpen(true)}
-              >
-                Science & sources
-                <ArrowUpRightIcon />
-              </button>
               <a
                 className="setting-row"
                 href="https://github.com/wrestle-R/Solar-System"
@@ -413,8 +442,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
                 <span>{utcLabel(new Date(date))}</span>
               </div>
               <p className="panel-hint">
-                North up, east left. Above the horizon doesn’t promise
-                visibility: daylight, weather and light pollution matter.
+                North ↑ · East ← · Horizon at the rim
               </p>
               <div className="sky-moon">
                 <MoonIcon />
@@ -473,14 +501,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
         />
       </div>
       <div className="scene-footnote">
-        <span>Drag to orbit · scroll to zoom</span>
-        <button
-          onClick={() => setNotesOpen(true)}
-          aria-label="About scale and accuracy"
-        >
-          <InfoIcon />
-          <span>Sizes & distances adapted</span>
-        </button>
+        <span>Drag to explore · scroll to zoom · click a world</span>
       </div>
       <a
         className="made-by"
@@ -491,6 +512,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
         by Russel
         <ArrowUpRightIcon />
       </a>
+      <LaunchIntro />
       {locationOpen && (
         <LocationDialog
           current={location}
@@ -498,7 +520,6 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
           onSave={saveLocation}
         />
       )}
-      {notesOpen && <FieldNotes onClose={() => setNotesOpen(false)} />}
     </main>
   );
 }

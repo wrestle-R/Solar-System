@@ -46,7 +46,13 @@ export default function TimeControls({
         </button>
         <button
           className="icon-button play-button"
-          aria-label={playing ? "Pause time" : "Play time forward"}
+          aria-label={
+            playing
+              ? "Pause time"
+              : speed < 0
+                ? "Play time backward"
+                : "Play time forward"
+          }
           title={playing ? "Pause" : "Play time"}
           onClick={onPlay}
         >
@@ -77,18 +83,7 @@ export default function TimeControls({
             })}
           </span>
         </button>
-        <select
-          className="speed-select"
-          value={speed}
-          onChange={(e) => onSpeed(Number(e.target.value))}
-          aria-label="Time travel speed"
-        >
-          <option value={-7}>−7d/s</option>
-          <option value={-1}>−1d/s</option>
-          <option value={1}>1d/s</option>
-          <option value={7}>7d/s</option>
-          <option value={30}>30d/s</option>
-        </select>
+
         <span className="control-divider" />
         <button
           className={`today-button ${live ? "is-live" : ""}`}
@@ -102,6 +97,35 @@ export default function TimeControls({
           )}
           <span>{live ? "Live" : "Now"}</span>
         </button>
+      </div>
+      <div className="time-scale">
+        <button
+          className="time-direction"
+          onClick={() => onSpeed(-speed)}
+          aria-label={speed < 0 ? "Switch time forward" : "Reverse time"}
+          title={speed < 0 ? "Switch time forward" : "Reverse time"}
+        >
+          {speed < 0 ? <CaretLeftIcon /> : <CaretRightIcon />}
+        </button>
+        <label htmlFor="time-scale">Time scale</label>
+        <input
+          id="time-scale"
+          type="range"
+          min="0.2"
+          max="30"
+          step="0.2"
+          value={Math.abs(speed)}
+          aria-label="Time scale"
+          aria-valuetext={`${Math.abs(speed).toFixed(2)} days per second, ${speed < 0 ? "reverse" : "forward"}`}
+          onChange={(event) =>
+            onSpeed(Number(event.target.value) * (speed < 0 ? -1 : 1))
+          }
+        />
+        <output htmlFor="time-scale" title="Simulated days per second">
+          {speed < 0 ? "−" : ""}
+          {Math.abs(speed).toFixed(2)}
+          <span> d/s</span>
+        </output>
       </div>
       {open && (
         <DateDialog
@@ -153,16 +177,9 @@ function DateDialog({
         >
           <XIcon />
         </button>
-        <span className="eyebrow copper">THE UNIVERSE HAS A HISTORY</span>
-        <h2>
-          Pick a moment.
-          <br />
-          <em>Go there.</em>
-        </h2>
-        <p>
-          Your birthday, a memory, a day that hasn’t happened yet. See where
-          everything was, or will be.
-        </p>
+        <span className="eyebrow copper">TIME TRAVEL</span>
+        <h2>Where in time?</h2>
+        <p>Choose a date and watch the solar system find its place.</p>
         <label className="date-input-label">
           Date and time (UTC)
           <input
@@ -184,7 +201,7 @@ function DateDialog({
         )}
         <button className="primary-button" type="submit">
           <ArrowCounterClockwiseIcon />
-          Travel to this moment
+          Go to this date
         </button>
       </form>
     </dialog>
