@@ -148,6 +148,7 @@ export default function Observatory({ initialTime }: { initialTime: number }) {
 
   return (
     <main className="universe" aria-label="Interactive solar system">
+      <h1 className="sr-only">Explore the solar system in 3D</h1>
       <div className="universe-scene">
         <OrbitalScene
           date={date}

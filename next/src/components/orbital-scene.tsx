@@ -56,16 +56,27 @@ export default function OrbitalScene(props: Props) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 250);
     camera.position.set(5, 30, 38);
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.09;
-    controls.enablePan = false;
-    controls.minDistance = 14;
-    controls.maxDistance = 210;
-    controls.maxPolarAngle = Math.PI * 0.49;
-    controls.minPolarAngle = 0.02;
-    controls.rotateSpeed = 0.5;
-    controls.zoomSpeed = 0.6;
+    let portrait =
+      host.clientWidth < 600 && host.clientHeight > host.clientWidth;
+    camera.up.set(portrait ? 1 : 0, portrait ? 0 : 1, 0);
+    function createControls() {
+      const nextControls = new OrbitControls(camera, renderer.domElement);
+      nextControls.enableDamping = true;
+      nextControls.dampingFactor = 0.09;
+      nextControls.enablePan = false;
+      nextControls.minDistance = 2.3;
+      nextControls.maxDistance = 210;
+      nextControls.maxPolarAngle = Math.PI * 0.49;
+      nextControls.minPolarAngle = 0.02;
+      nextControls.rotateSpeed = 0.5;
+      nextControls.zoomSpeed = 0.6;
+      return nextControls;
+    }
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    let controls = createControls();
+    controls.enableDamping = !reducedMotion;
     scene.add(new THREE.AmbientLight(0xa7bfd8, 1.25));
     const sunlight = new THREE.PointLight(0xffdfae, 50, 0, 1);
     scene.add(sunlight);
@@ -238,7 +249,19 @@ export default function OrbitalScene(props: Props) {
       const { width, height } = host.getBoundingClientRect();
       renderer.setSize(width, height);
       camera.aspect = width / Math.max(height, 1);
-      const nextFit = Math.max(1, 1.52 / camera.aspect);
+      const nextPortrait = width < 600 && height > width;
+      if (nextPortrait !== portrait) {
+        portrait = nextPortrait;
+        camera.up.set(portrait ? 1 : 0, portrait ? 0 : 1, 0);
+        controls.dispose();
+        controls = createControls();
+        controls.enableDamping = !reducedMotion;
+        camera.position.set(5, 30, 38).multiplyScalar(fitScale);
+        flight = null;
+        following = null;
+        lastZoom = 1;
+      }
+      const nextFit = Math.max(1.12, (portrait ? 0.79 : 1.52) / camera.aspect);
       camera.position.multiplyScalar(nextFit / fitScale);
       fitScale = nextFit;
       camera.updateProjectionMatrix();
@@ -259,7 +282,7 @@ export default function OrbitalScene(props: Props) {
       if (p.topView !== lastTop || p.resetKey !== lastReset) {
         camera.position
           .set(p.topView ? 0 : 5, p.topView ? 49 : 30, p.topView ? 0.01 : 38)
-          .multiplyScalar(fitScale);
+          .multiplyScalar(fitScale * (portrait && p.topView ? 1.85 : 1));
         controls.target.set(0, 0, 0);
         lastTop = p.topView;
         lastReset = p.resetKey;
@@ -318,8 +341,8 @@ export default function OrbitalScene(props: Props) {
         following = p.selected;
       }
       if (flight) {
-        camera.position.lerp(flight.position, 0.09);
-        controls.target.lerp(flight.target, 0.09);
+        camera.position.lerp(flight.position, reducedMotion ? 1 : 0.09);
+        controls.target.lerp(flight.target, reducedMotion ? 1 : 0.09);
         if (camera.position.distanceTo(flight.position) < 0.015) flight = null;
       } else if (following) {
         const delta = meshes
@@ -474,7 +497,7 @@ export default function OrbitalScene(props: Props) {
           <h3>The cosmos is still here.</h3>
           <p>
             3D rendering is unavailable. Every planet’s calculated data, the
-            time controls, and your sky chart still work below.
+            time controls, and your sky chart still work from the controls.
           </p>
         </div>
       )}
