@@ -23,6 +23,7 @@ import {
 } from "astronomy-engine";
 import { BODIES, PLANETS, type ObjectId } from "@/lib/bodies";
 import { DAY, scenePosition } from "@/lib/astronomy";
+import { createStarfield } from "@/lib/starfield";
 
 type Props = {
   date: number;
@@ -196,30 +197,9 @@ export default function OrbitalScene(props: Props) {
       }),
     );
     scene.add(belt);
-    const starPoints = [];
-    for (let i = 0; i < 650; i++) {
-      const a = rand() * Math.PI * 2,
-        z = rand() * 2 - 1,
-        r = 90;
-      starPoints.push(
-        Math.sqrt(1 - z * z) * Math.cos(a) * r,
-        z * r,
-        Math.sqrt(1 - z * z) * Math.sin(a) * r,
-      );
-    }
-    const stars = new THREE.Points(
-      new THREE.BufferGeometry().setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(starPoints, 3),
-      ),
-      new THREE.PointsMaterial({
-        color: 0xa8b4c4,
-        size: 0.035,
-        transparent: true,
-        opacity: 0.42,
-      }),
-    );
-    scene.add(stars);
+    const starfield = createStarfield(renderer.getPixelRatio());
+    scene.add(starfield.group);
+    textures.push(starfield.texture);
     const moonMeshes = Array.from({ length: 4 }, () => {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.055, 12, 8),
@@ -415,6 +395,8 @@ export default function OrbitalScene(props: Props) {
         m.visible = p.selected === "Jupiter";
       });
       controls.update();
+      // Treat the sky as infinitely distant, including when the camera zooms out.
+      starfield.group.position.copy(camera.position);
       composer.render();
       const { clientWidth: w, clientHeight: h } = host;
       for (const [index, label] of satelliteLabels.entries()) {

@@ -11,3 +11,5 @@ Earth’s Moon and Jupiter’s four Galilean moons are modelled. Other planetary
 Calculations run in the browser. Observer coordinates stay in localStorage and are not sent to the application server.
 
 Planet, night, cloud and ring textures are by [Solar System Scope](https://www.solarsystemscope.com/textures/), based on NASA imagery, used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+The decorative background is a procedurally generated Milky Way band and illustrative stars. It is not a catalogue, an observer sky or a dated star map; use the location sky chart for the calculated view.

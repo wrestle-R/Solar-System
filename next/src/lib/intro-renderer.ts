@@ -1,8 +1,11 @@
+import { galacticCanvas } from "./galactic-background";
+
 /** A projected particle field and layered accretion flow, rendered without a second WebGL context. */
 export function createIntroRenderer(canvas: HTMLCanvasElement) {
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) throw new Error("Canvas unavailable");
   const ctx = context;
+  const galaxy = galacticCanvas();
   let width = 1,
     height = 1,
     pixelRatio = 1,
@@ -200,6 +203,13 @@ export function createIntroRenderer(canvas: HTMLCanvasElement) {
       const shift = 1 - smooth(0, 0.3, progress);
       const cx = width * (0.5 + (portrait ? 0 : 0.18) * shift) + pointerX * 10;
       const cy = height * (0.5 - (portrait ? 0.2 : 0) * shift) - pointerY * 8;
+      ctx.save();
+      ctx.translate(width * 0.5, height * 0.5);
+      ctx.rotate(-0.35);
+      ctx.globalAlpha = 0.72 * (1 - smooth(0.25, 0.65, progress));
+      const size = Math.max(width * 1.5, height * 2.5);
+      ctx.drawImage(galaxy, -size * 0.5, -size * 0.25, size, size * 0.5);
+      ctx.restore();
       drawStars(time, progress, cx, cy);
       drawHole(
         time,
